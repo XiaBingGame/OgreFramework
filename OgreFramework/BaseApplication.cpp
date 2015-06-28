@@ -16,6 +16,7 @@ http://www.ogre3d.org/wiki/
 */
 
 #include "BaseApplication.h"
+#include <OgreGpuProgramManager.h>
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE
 #include <macUtils.h>
@@ -85,7 +86,7 @@ void BaseApplication::chooseSceneManager(void)
     mSceneMgr = mRoot->createSceneManager(Ogre::ST_GENERIC);
 
     // Initialize the OverlaySystem (changed for Ogre 1.9)
-    mOverlaySystem = new Ogre::OverlaySystem();
+    
     mSceneMgr->addRenderQueueListener(mOverlaySystem);
 }
 //---------------------------------------------------------------------------
@@ -103,10 +104,31 @@ void BaseApplication::createCamera(void)
     mCameraMan = new OgreBites::SdkCameraMan(mCamera);   // Create a default camera controller
 }
 //---------------------------------------------------------------------------
+void BaseApplication::setupInput()
+{
+	OIS::ParamList pl;
+	size_t winHandle = 0;
+	std::ostringstream winHandleStr;
+
+	mWindow->getCustomAttribute("WINDOW", &winHandle);
+	winHandleStr << winHandle;
+
+	pl.insert(std::make_pair("WINDOW", winHandleStr.str()));
+	mInputManager = OIS::InputManager::createInputSystem(pl);
+	mKeyboard = static_cast<OIS::Keyboard*>(mInputManager->createInputObject(OIS::OISKeyboard, true));
+	mMouse = static_cast<OIS::Mouse*>(mInputManager->createInputObject(OIS::OISMouse, true));
+	mMouse->setEventCallback(this);
+	mKeyboard->setEventCallback(this);
+
+	mInputContext.mKeyboard = mKeyboard;
+	mInputContext.mMouse = mMouse;
+}
+//---------------------------------------------------------------------------
 void BaseApplication::createFrameListener(void)
 {
     Ogre::LogManager::getSingletonPtr()->logMessage("*** Initializing OIS ***");
-    OIS::ParamList pl;
+    
+	/*OIS::ParamList pl;
     size_t windowHnd = 0;
     std::ostringstream windowHndStr;
 
@@ -120,17 +142,17 @@ void BaseApplication::createFrameListener(void)
     mMouse = static_cast<OIS::Mouse*>(mInputManager->createInputObject(OIS::OISMouse, true));
 
     mMouse->setEventCallback(this);
-    mKeyboard->setEventCallback(this);
-
+    mKeyboard->setEventCallback(this);*/
+	//setupInput();
     // Set initial mouse clipping size
     windowResized(mWindow);
 
     // Register as a Window listener
     Ogre::WindowEventUtilities::addWindowEventListener(mWindow, this);
 
-    mInputContext.mKeyboard = mKeyboard;
-    mInputContext.mMouse = mMouse;
-    mTrayMgr = new OgreBites::SdkTrayManager("InterfaceName", mWindow, mInputContext, this);
+    // mInputContext.mKeyboard = mKeyboard;
+    // mInputContext.mMouse = mMouse;
+    // mTrayMgr = new OgreBites::SdkTrayManager("InterfaceName", mWindow, mInputContext, this);
     mTrayMgr->showFrameStats(OgreBites::TL_BOTTOMLEFT);
     mTrayMgr->showLogo(OgreBites::TL_BOTTOMRIGHT);
     mTrayMgr->hideCursor();
@@ -203,6 +225,60 @@ void BaseApplication::setupResources(void)
                 archName, typeName, secName);
         }
     }
+
+	Ogre::String type, sec, arch;
+	type = "FileSystem";
+	sec = "Popular";
+
+	const Ogre::ResourceGroupManager::LocationList genLocs = Ogre::ResourceGroupManager::getSingleton().getResourceLocationList("General");
+	arch = genLocs.front()->archive->getName();
+
+	Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/GLSL", type, sec);
+	Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/HLSL", type, sec);
+#ifdef OGRE_BUILD_PLUGIN_CG
+	Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/Cg", type, sec);
+#endif
+
+/*
+#ifdef OGRE_BUILD_PLUGIN_CG
+	bool use_HLSL_Cg_shared = true;
+#else
+	bool use_HLSL_Cg_shared = Ogre::GpuProgramManager::getSingleton().isSyntaxSupported("hlsl");
+#endif
+
+	if(Ogre::GpuProgramManager::getSingleton().isSyntaxSupported("glsles"))
+	{
+		Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/GLSLES", type, sec);
+	}
+	else if(Ogre::GpuProgramManager::getSingleton().isSyntaxSupported("glsl"))
+	{
+		if(Ogre::GpuProgramManager::getSingleton().isSyntaxSupported("glsl150"))
+		{
+			Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/GLSL150", type, sec);
+		}
+		else
+		{
+			Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/GLSL", type, sec);
+		}
+
+		if(Ogre::GpuProgramManager::getSingleton().isSyntaxSupported("glsl400"))
+		{
+			Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/GLSL400", type, sec);
+		}
+	}
+	else if(Ogre::GpuProgramManager::getSingleton().isSyntaxSupported("hlsl"))
+	{
+		Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/HLSL", type, sec);
+	}
+#ifdef OGRE_BUILD_PLUGIN_CG
+	Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/Cg", type, sec);
+#endif
+
+	if (use_HLSL_Cg_shared)
+	{
+		Ogre::ResourceGroupManager::getSingleton().addResourceLocation(arch + "/materials/programs/HLSL_Cg", type, sec);
+	}
+*/
 }
 //---------------------------------------------------------------------------
 void BaseApplication::createResourceListener(void)
@@ -246,23 +322,50 @@ void BaseApplication::go(void)
 bool BaseApplication::setup(void)
 {
     mRoot = new Ogre::Root(mPluginsCfg);
-
+	mOverlaySystem = new Ogre::OverlaySystem();
     setupResources();
 
-    bool carryOn = configure();
-    if (!carryOn) return false;
+	bool carryOn = configure();
+	if (!carryOn) return false;
 
-    chooseSceneManager();
-    createCamera();
-    createViewports();
+	setupInput();
 
-    // Set default mipmap level (NB some APIs ignore this)
-    Ogre::TextureManager::getSingleton().setDefaultNumMipmaps(5);
+	Ogre::ResourceGroupManager::getSingleton().initialiseResourceGroup("Essential");
 
-    // Create any resource listeners (for loading screens)
-    createResourceListener();
-    // Load resources
-    loadResources();
+	mTrayMgr = new OgreBites::SdkTrayManager("InterfaceName", mWindow, mInputContext, this);
+	mTrayMgr->showBackdrop("SdkTrays/Bands");
+	mTrayMgr->getTrayContainer(OgreBites::TL_NONE)->hide();
+
+	// DummyScreen
+	mWindow->removeAllViewports();
+	Ogre::SceneManager* sm = mRoot->createSceneManager(Ogre::ST_GENERIC, "DummyScene");
+	sm->addRenderQueueListener(mOverlaySystem);
+	Ogre::Camera* cam = sm->createCamera("DummyCamera");
+	mWindow->addViewport(cam);
+
+	// Set default mipmap level (NB some APIs ignore this)
+	Ogre::TextureManager::getSingleton().setDefaultNumMipmaps(5);
+
+	mTrayMgr->showLoadingBar(1, 0);
+
+	// Create any resource listeners (for loading screens)
+	createResourceListener();
+	// Load resources
+	loadResources();
+
+	mTrayMgr->hideLoadingBar();
+
+	mWindow->removeAllViewports();
+	sm->removeRenderQueueListener(mOverlaySystem);
+	sm->destroyAllCameras();
+	mRoot->destroySceneManager(sm);
+	// ....
+	
+    
+
+	chooseSceneManager();
+	createCamera();
+	createViewports();
 
     // Create the scene
     createScene();

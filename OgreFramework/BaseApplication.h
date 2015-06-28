@@ -81,6 +81,7 @@ public:
 
 protected:
     virtual bool setup();
+	virtual void setupInput();
     virtual bool configure(void);
     virtual void chooseSceneManager(void);
     virtual void createCamera(void);

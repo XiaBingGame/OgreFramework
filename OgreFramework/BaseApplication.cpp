@@ -12,11 +12,14 @@ This source file is part of the
       |___/
 Tutorial Framework (for Ogre 1.9)
 http://www.ogre3d.org/wiki/
+
+modified: 2015/06/28
+modifier: huang.x.b
+content: 加载资源时可以显示加载条
 -----------------------------------------------------------------------------
 */
 
 #include "BaseApplication.h"
-#include <OgreGpuProgramManager.h>
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_APPLE
 #include <macUtils.h>
